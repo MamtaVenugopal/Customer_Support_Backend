@@ -82,21 +82,21 @@ Threshold decision: score > T → anomaly
 #### 1. SimpleAE (Baseline, Tiny)
 - **Parameters**: ~10K
 - **Architecture**: Dense encoder [640 → 256 → 128] → 32-dim bottleneck → mirrored decoder
-- **Epochs**: 20 per fold
+- **Epochs**: 40 per fold
 - **Use case**: Interpretability, fast training
 - **Results**: Hmean=0.6840 (weakest target generalization)
 
 #### 2. UNetAE (Medium, Skip-Connected)
 - **Parameters**: ~500K
 - **Architecture**: Conv encoder with skip connections → 256-dim bottleneck → skip-connected decoder
-- **Epochs**: 40 per fold
+- **Epochs**: 15 per fold
 - **Use case**: Multi-scale feature preservation
 - **Results**: Hmean=0.7003 (solid middle performance)
 
 #### 3. MobileNetV2 (Large, Pretrained)
 - **Parameters**: ~2M
 - **Architecture**: ImageNet-pretrained MobileNetV2 + custom AE head + batch norm throughout
-- **Epochs**: 40 per fold
+- **Epochs**: 15 per fold
 - **Use case**: Transfer learning, efficient inference
 - **Results**: Hmean=0.7155 ✅ **WINNER** (best target generalization)
 
