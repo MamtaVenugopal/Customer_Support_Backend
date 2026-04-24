@@ -1,0 +1,49 @@
+{
+  "winner": {
+    "mode": "adversarial",
+    "arch": "mobilenet",
+    "key": "adversarial_mobilenet",
+    "n_folds": 3,
+    "metrics": {
+      "src_auc": 0.6214666666666666,
+      "tgt_auc": 0.6361777777777777,
+      "ovr_auc": 0.6284555555555554,
+      "hmean": 0.5761195756117453,
+      "fold_tgt_auc_std": 0.004328309845421179,
+      "mean_best_val_loss": 0.059788682594002864
+    }
+  },
+  "n_clips": 600,
+  "roc_auc_score_mse": 0.6265333333333334,
+  "melbin_pooled_top10_by_diff": [
+    37,
+    41,
+    11,
+    36,
+    35,
+    18,
+    34,
+    38,
+    12,
+    20
+  ],
+  "melbin_pooled_most_negative_diff_bins": [
+    30,
+    23,
+    42,
+    62,
+    22
+  ],
+  "melbin_pooled_max_diff": 0.03168526310628901,
+  "melbin_pooled_min_diff": -0.02356576964259148,
+  "pca_pc1_roc_auc_proxy": 0.5959777777777778,
+  "pca_explained_variance_ratio": [
+    0.45029130578041077,
+    0.08483374863862991
+  ],
+  "per_section_argmax_diff_bin": {
+    "0": 41,
+    "1": 37,
+    "2": 18
+  }
+}
