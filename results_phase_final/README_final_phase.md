@@ -77,6 +77,32 @@ Explanation:
 - But the sampler intentionally enforces higher target ratio in minibatches (`~20%`) so optimization is not fully source-dominated.
 - This balancing is crucial for domain generalization since raw target coverage is tiny.
 
+### Why this imbalance is a real optimization problem
+
+In this run, combined bearing training data is approximately:
+
+- source = 5940
+- target = 59
+
+So raw target share is about 1%. With plain random batching, gradients are almost entirely source-driven and the model may overfit source-domain reconstruction patterns.
+
+### How the pipeline addresses it
+
+1. **Stratified K-fold split (K=3, by section and domain)**  
+   Source and target are split separately and then combined per fold. This ensures every fold's train/val subsets contain both domains and broad section coverage.
+
+2. **BalancedDomainSampler in training batches**  
+   Even though fold-level dataset counts remain imbalanced, mini-batches are rebalanced toward target (`target_ratio=0.2`).  
+   Example first batch log: `51 source + 13 target = 64` (20% target), far above raw ~1% target prevalence.
+
+3. **Mode/loss terms run on these balanced batches**  
+   `mixed`, `domain_regularized`, and `contrastive` all benefit from seeing consistent target exposure during optimization.
+
+### What K=3 helps with (and what it does not)
+
+- **Helps:** more stable model selection, less dependence on one split, validation always includes source+target clips, and ensemble averaging reduces variance.
+- **Does not by itself solve imbalance:** it improves split fairness and reliability, but batch rebalancing is the primary mechanism that counteracts gradient dominance from source data.
+
 ## 5) Model comparison and winner selection
 
 Total phase-2 runs evaluated: **9**.
