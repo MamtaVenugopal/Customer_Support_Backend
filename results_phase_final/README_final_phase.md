@@ -88,6 +88,28 @@ The K fold checkpoints for this model are packaged under `best_model/mixed_mobil
 
 In short: the threshold is chosen on the labelled dev-test set to optimize F1, then reused unchanged on eval-test.
 
+## Visual explanation (from output data)
+
+These figures help explain the thresholding workflow and model behavior on labelled dev-test:
+
+- Winner ensemble ROC (separation quality before thresholding):  
+  ![Winner ensemble ROC](eval_results/mixed_mobilenet/ensemble/roc.png)
+- Winner score histograms (normal vs anomaly score overlap, where threshold cuts):  
+  ![Winner score histograms](eval_results/mixed_mobilenet/ensemble/score_histograms.png)
+- Winner per-section AUC (section-wise robustness):  
+  ![Winner per-section AUC](eval_results/mixed_mobilenet/ensemble/per_section_auc.png)
+- Winner overall summary panel:  
+  ![Winner overall summary](eval_results/mixed_mobilenet/ensemble/overall_summary.png)
+
+For broader context across all runs:
+
+- Full model ranking:  
+  ![Leaderboard](leaderboard.png)
+- Source-vs-target domain behavior:  
+  ![Source vs target](source_vs_target.png)
+- Fold variance and stability:  
+  ![K-fold variance](kfold_variance.png)
+
 ## Reproducing any phase-2 row
 
 ```
