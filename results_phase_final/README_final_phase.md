@@ -157,10 +157,11 @@ For unlabeled eval-test (`predict_outputs/`):
 - score files generated per section
 - threshold in latest standalone test: `None` (scores only)
 
-Important:
+Important clarification:
 
-- **True confusion matrix cannot be computed on unlabeled eval-test** without ground-truth labels.
-- Confusion-matrix analysis above is from labeled dev-test calibration only.
+- Source/target **domain labels** are not available in eval-test.
+- If anomaly/normal **ground-truth labels** are available locally, confusion matrix can be computed for eval-test.
+- For official DCASE evaluation data (where anomaly/normal labels are hidden), confusion matrix cannot be computed offline and is available only after official scoring.
 
 ## 9) Repro commands (core)
 
