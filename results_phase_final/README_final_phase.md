@@ -74,6 +74,20 @@ The K fold checkpoints for this model are packaged under `best_model/mixed_mobil
 - There is **no threshold calibration on eval-test** itself because eval-test is unlabelled.
 - Eval-train (sections 03-05 train split) is used as part of model training with dev-train; it is **not used for threshold tuning**.
 
+### How `best_thr` is computed
+
+1. Run the winner fold-ensemble on labelled dev-test and get one anomaly score per clip (`dev_scores`).
+2. Convert labels to binary ground truth: anomaly = 1, normal = 0 (`y_true`).
+3. Sweep all candidate score cutoffs using `precision_recall_curve(y_true, dev_scores)`.
+4. For each candidate threshold, compute:
+   `F1 = 2 * precision * recall / (precision + recall)`.
+5. Select the threshold index with maximum F1 (`best_i = argmax(F1)`), then set:
+   `best_thr = thr[best_i]`.
+6. Use this fixed `best_thr` for downstream decision files on eval-test:
+   `decision = 1 if score >= best_thr else 0`.
+
+In short: the threshold is chosen on the labelled dev-test set to optimize F1, then reused unchanged on eval-test.
+
 ## Reproducing any phase-2 row
 
 ```
