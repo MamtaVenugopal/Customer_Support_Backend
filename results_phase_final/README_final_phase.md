@@ -110,26 +110,59 @@ For broader context across all runs:
 - Fold variance and stability:  
   ![K-fold variance](kfold_variance.png)
 
-## FP32 vs FP16 inference (GPU deployment sanity check)
+## Deployment optimization results (quantization vs pruning)
 
-Same winner checkpoints (`best_model/mixed_mobilenet_fold*.pt`), same fixed threshold as FP32 calibration, **600 labelled dev-test clips**. Labels merged from `eval_results/mixed_mobilenet/ensemble/per_clip_scores.csv`; comparison via `compare_fp_predictions.py`.
+### A) FP16 quantization speed benchmark (no pruning)
 
-| mode | TN | FP | FN | TP | F1 |
+From `benchmark_predict.py` on eval-test (600 clips, CUDA):
+
+- FP32 throughput: **819.92 clips/s**
+- FP16 throughput: **1304.72 clips/s**
+- FP16 speedup over FP32: **1.591x**
+
+Conclusion: FP16 inference gives a strong deployment speedup.
+
+### B) Pruning setup and parameter details
+
+Pruning script: `prune_winner.py`  
+Method: **global L1 unstructured pruning** on `Conv2d`, `ConvTranspose2d`, `Linear` weights  
+Target amount: **0.20** (20%)
+
+Per fold (`mixed_mobilenet_fold*.pt`):
+
+| stat | before pruning | after pruning |
+| --- | ---: | ---: |
+| total parameters | 682,385 | 682,385 |
+| nonzero parameters | 682,385 | 549,201 |
+| zero parameters | 0 | 133,184 |
+| sparsity | 0.0000 | 0.1952 |
+
+Output artifacts:
+
+- pruned checkpoints: `best_model_pruned_a20/`
+- pruning report: `best_model_pruned_a20/prune_report.json`
+
+### C) Accuracy impact: original FP16 vs pruned FP16 (same threshold)
+
+Comparison on labelled dev-test (600 clips), labels merged from `eval_results/mixed_mobilenet/ensemble/per_clip_scores.csv` via `compare_fp_predictions.py`:
+
+| model | TN | FP | FN | TP | F1 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| FP32 | 79 | 221 | 17 | 283 | 0.703980 |
-| FP16 | 78 | 222 | 17 | 283 | 0.703106 |
+| Original FP16 (unpruned) | 78 | 222 | 17 | 283 | 0.703106 |
+| Pruned FP16 (amount=0.20) | 54 | 246 | 13 | 287 | 0.689076 |
 
-Delta (FP16 − FP32): TN −1, FP +1, FN 0, TP 0 — **1 decision flip** at clip level (one normal clip crosses the threshold). Practical impact on this run is negligible.
+Delta (pruned − original): **TN −24, FP +24, FN −4, TP +4**  
+Decision flips: **28 clips**
 
-### FP32 vs FP16: what changes in the weights?
+Conclusion: in this run, **pruning hurt classification quality** (notably FP increase and F1 drop), while FP16 quantization alone gave good speedup with far smaller behavioral change. Current recommendation is to deploy **FP16 without pruning**.
 
-There is **no second trained model** and **no separate FP16 checkpoint file** in this pipeline unless you explicitly save one.
+### D) FP32 vs FP16 weights: what changes?
 
-- **Checkpoint on disk** stays **FP32** (`torch.save` from training). Loading uses those same tensors.
-- **FP16 inference** (`predict.py --precision fp16` on CUDA): after load, PyTorch casts parameters to **float16 in GPU memory** (`model.half()`), and activations run in half precision. Arithmetic uses fewer mantissa bits than FP32, so scores can shift slightly near the decision boundary — hence the tiny CM delta above.
-- **FP32 inference**: parameters stay float32 on GPU; scores match the original evaluation path most closely.
+There is no separate retrained FP16 model unless explicitly exported:
 
-So the “difference” is **runtime numeric precision**, not different learned weights. To ship true half-precision weights you would export (e.g.) FP16 state dict or ONNX at reduced precision; behaviour would still be “same architecture, same training, different storage/compute dtype.”
+- checkpoint files on disk are FP32 by default
+- FP16 mode casts weights/activations to half precision at inference time on CUDA
+- differences are from runtime numeric precision, not new learned weights
 
 ## Reproducing any phase-2 row
 
