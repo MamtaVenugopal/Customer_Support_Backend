@@ -164,6 +164,81 @@ There is no separate retrained FP16 model unless explicitly exported:
 - FP16 mode casts weights/activations to half precision at inference time on CUDA
 - differences are from runtime numeric precision, not new learned weights
 
+## Explainability (post-hoc, reconstruction-based)
+
+Summary artifact: [`explain_summary.json`](explain_summary.json) (paths below are relative to this `results_phase_final/` folder).
+
+Packaged outputs may arrive as **`explainability_outputs.zip`**. Put the zip **in this same folder** as `README_final_phase.md`, then unzip so PNGs end up under **`explain/`**:
+
+```bash
+cd final_Dcase/results_phase_final   # folder that contains this README
+mkdir -p explain
+unzip -o explainability_outputs.zip -d explain
+# If files land under explain/some_subfolder/, move the PNGs up into explain/ until paths match the table below.
+```
+
+**Winner covered:** `mixed` / `mobilenet` (`mixed_mobilenet`), **K = 3** folds — aligned with `best_model/`.
+
+**Note (from JSON):** Explainability is derived from **ensemble reconstruction MSE** and **pooled bottleneck features `z`**; the domain classifier is **not** used at inference.
+
+**Split:** labelled **dev-test** (sections 00–02, **600 clips**).
+
+### Files to commit for GitHub (so README images render)
+
+GitHub renders images only if they exist **in the repo** at the paths referenced by this README (relative to `README_final_phase.md`). Commit these **10 PNGs** under `explain/`:
+
+| Path under `results_phase_final/` |
+| --- |
+| `explain/explain_melbin_mean_error.png` |
+| `explain/explain_pca_latent_label.png` |
+| `explain/explain_pca_latent_section.png` |
+| `explain/explain_pca_latent_domain.png` |
+| `explain/example_high_err_anomaly_241.png` |
+| `explain/example_high_err_anomaly_322.png` |
+| `explain/example_high_err_anomaly_214.png` |
+| `explain/example_low_err_normal_151.png` |
+| `explain/example_low_err_normal_170.png` |
+| `explain/example_low_err_normal_192.png` |
+
+The zip alone does **not** make images show on GitHub until those files are extracted and committed (or you use raw URLs). Optional: add `explain/` to `.gitattributes` if you use Git LFS for large PNGs.
+
+### Outputs listed in `explain_summary.json`
+
+| Artifact | Purpose |
+| --- | --- |
+| `explain/explain_melbin_mean_error.png` | Mean squared error vs mel bin: normal vs anomaly (and difference curve). |
+| `explain/explain_pca_latent_label.png` | PCA (2D) of ensemble-mean `z`, colored by normal/anomaly. |
+| `explain/explain_pca_latent_section.png` | Same PCA, colored by section. |
+| `explain/explain_pca_latent_domain.png` | Same PCA, colored by source/target domain. |
+| `explain/example_high_err_anomaly_*.png` (3) | High-MSE anomalies: input log-mel, reconstruction, squared-error map. |
+| `explain/example_low_err_normal_*.png` (3) | Low-MSE normals: same triplet layout. |
+
+**Integrated gradients:** `integrated_gradients` is `null` in this run — not computed (optional in `explainability_colab.py` via `--with_ig`).
+
+### Figures (aggregate + PCA)
+
+![Mel-bin attribution](explain/explain_melbin_mean_error.png)
+
+![PCA by label](explain/explain_pca_latent_label.png)
+
+![PCA by section](explain/explain_pca_latent_section.png)
+
+![PCA by domain](explain/explain_pca_latent_domain.png)
+
+### Example panels (high-error anomalies vs low-error normals)
+
+![Example anomaly 241](explain/example_high_err_anomaly_241.png)
+
+![Example anomaly 322](explain/example_high_err_anomaly_322.png)
+
+![Example anomaly 214](explain/example_high_err_anomaly_214.png)
+
+![Example normal 151](explain/example_low_err_normal_151.png)
+
+![Example normal 170](explain/example_low_err_normal_170.png)
+
+![Example normal 192](explain/example_low_err_normal_192.png)
+
 ## Reproducing any phase-2 row
 
 ```
