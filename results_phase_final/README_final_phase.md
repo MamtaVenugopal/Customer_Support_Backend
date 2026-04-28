@@ -1,141 +1,16 @@
-# Final Phase Report (Consolidated)
-_Updated for discussion-ready storytelling_
+# Phase-2 Results Bundle
+_Generated 2026-04-28 19:35_
 
-## Executive talk track (2 minutes)
+Total phase-2 runs: **9**
 
-- We solve unsupervised bearing anomaly detection under domain shift, where source data is abundant and target data is extremely scarce.
-- Raw training distribution is highly imbalanced (about 5940 source vs 59 target), so we do not rely on naive random batching.
-- We use stratified 3-fold CV for robust model selection and balanced minibatch sampling (`target_ratio=0.2`) so target clips contribute to gradients.
-- We compare 9 runs across architecture/mode combinations and select the winner by DCASE harmonic mean with target-aware tie-breaks.
-- Best model is `mixed/mobilenet` (3-fold ensemble), which outperforms trained UNet on source/target/overall AUC and hmean.
-- Threshold calibration on labeled dev-test gives high recall (low FN) at the cost of higher FP, matching a safety-first operating point.
+Phase-2 models are trained on the **combined** dev-train (sections 00-02) + eval-train (sections 03-05) training pool with **stratified K-fold cross-validation** over (section × domain) and with source+target clips present in every val fold. Every number below is the **fold ensemble** (anomaly scores averaged across the K fold-best checkpoints) scored on the labelled dev-test split (sections 00-02).
+Eval-test (sections 03-05, unlabelled) is held out entirely — no script in this pipeline reads it.
 
-## 1) Problem statement and dataset context
+## Recommended model
 
-This work addresses **unsupervised anomalous sound detection (ASD)** for machine condition monitoring with a **domain generalization** constraint (DCASE 2022 Task 2 style):
+**`mixed/mobilenet`** — this is the model to ship.
 
-- training mostly on normal sounds,
-- handling source/target domain shift,
-- applying one threshold even when test-domain identity is unknown.
-
-Reference: [DCASE 2022 Task 2](https://dcase.community/challenge2022/task-unsupervised-anomalous-sound-detection-for-machine-condition-monitoring#dataset-overview)
-
-### Source vs target and imbalance
-
-- Source domain is the dominant operating condition.
-- Target domain is a shifted condition (speed/load/noise/mic/etc.).
-- Per-section design is highly imbalanced (about 990 source normal vs 10 target normal).
-- In this bearing pipeline logs, combined pool is approximately 5940 source vs 59 target.
-
-Implication: target robustness and fold variance are critical metrics, not only source fit.
-
-## 2) Dataset structure used in this project
-
-For bearing:
-
-- train roots: dev-train sections `00-02` + eval/additional-train sections `03-05`
-- labeled validation/evaluation for model selection: dev-test sections `00-02`
-- unlabeled final scoring split: eval-test sections `03-05`
-
-Filename patterns:
-
-- labeled style includes domain/label tokens
-- eval-test style is stripped (`section_03_0000.wav`) with hidden domain/label
-
-## 3) Architectures and parameter counts
-
-From `model.py`:
-
-| Architecture key | Class | Params |
-|---|---|---:|
-| `ae` | `SimpleAE` | 6,929 |
-| `unet` | `UNetAE` | 467,233 |
-| `mobilenet` | `MobileNetAE` | 682,385 |
-| `unet_mobilenet_encoder` | `UNetMobileNetEncoderAE` | 703,601 |
-
-Input to all models: `(B, 1, H, W)` log-mel.  
-Output: `(recon, z)`, with anomaly score as reconstruction MSE.
-
-## 4) Training modes and loss definitions
-
-Modes in `train_lean.py`:
-
-- `baseline`: source-only batches, optimize reconstruction MSE only
-- `mixed`: source+target batches, optimize reconstruction MSE only
-- `domain_regularized`: reconstruction MSE + domain classification regularizer
-- `contrastive`: reconstruction MSE + contrastive regularizer
-
-Loss formulation:
-
-- `L_rec = MSE(recon, x)`
-- `L_total = L_rec + 0.1 * L_dom + 0.1 * L_ctr`
-- Mode-specific activation:
-  - `baseline`: `L_total = L_rec`
-  - `mixed`: `L_total = L_rec`
-  - `domain_regularized`: `L_total = L_rec + 0.1 * CrossEntropy(domain_clf(z), domain_label)`
-  - `contrastive`: `L_total = L_rec + 0.1 * contrastive_loss(mean_pool(z), mean_pool(z))`
-
-Key interpretation:
-
-- Modes are primarily defined by which auxiliary loss terms are active.
-- `mixed` changes data exposure (includes target in training) without adding a new loss term.
-- `domain_regularized` and `contrastive` add auxiliary supervision on top of reconstruction.
-
-K-fold protocol:
-
-- stratified split by `(section, domain)` with `K=3` in this run,
-- best epoch selected by fold val loss,
-- inference uses K-fold score averaging (ensemble).
-
-### Interpreting fold/batch composition logs
-
-Example training logs:
-
-- `val: 1980 source + 21 target = 2001 clips (both drawn from both roots, all normal)`
-- `train=3998 (src=3960, tgt=38)  val=2001`
-- `[batch-check] first batch: 51 source + 13 target = 64 (target share = 20%)`
-
-Explanation:
-
-- `train=3998` and `val=2001` are fold-level dataset sizes, not batch sizes.
-- Validation fold still reflects natural imbalance (source dominates target).
-- Training fold is similarly imbalanced at dataset level.
-- But the sampler intentionally enforces higher target ratio in minibatches (`~20%`) so optimization is not fully source-dominated.
-- This balancing is crucial for domain generalization since raw target coverage is tiny.
-
-### Why this imbalance is a real optimization problem
-
-In this run, combined bearing training data is approximately:
-
-- source = 5940
-- target = 59
-
-So raw target share is about 1%. With plain random batching, gradients are almost entirely source-driven and the model may overfit source-domain reconstruction patterns.
-
-### How the pipeline addresses it
-
-1. **Stratified K-fold split (K=3, by section and domain)**  
-   Source and target are split separately and then combined per fold. This ensures every fold's train/val subsets contain both domains and broad section coverage.
-
-2. **BalancedDomainSampler in training batches**  
-   Even though fold-level dataset counts remain imbalanced, mini-batches are rebalanced toward target (`target_ratio=0.2`).  
-   Example first batch log: `51 source + 13 target = 64` (20% target), far above raw ~1% target prevalence.
-
-3. **Mode/loss terms run on these balanced batches**  
-   `mixed`, `domain_regularized`, and `contrastive` all benefit from seeing consistent target exposure during optimization.
-
-### What K=3 helps with (and what it does not)
-
-- **Helps:** more stable model selection, less dependence on one split, validation always includes source+target clips, and ensemble averaging reduces variance.
-- **Does not by itself solve imbalance:** it improves split fairness and reliability, but batch rebalancing is the primary mechanism that counteracts gradient dominance from source data.
-
-## 5) Model comparison and winner selection
-
-Total phase-2 runs evaluated: **9**.
-
-Winner: **`mixed/mobilenet`**.
-
-Selected by highest ensemble hmean, tie-broken by target AUC and lower fold target-AUC variance.
+Picked by highest ensemble hmean (0.5904); tie-broken by target AUC (0.6707) and lowest fold-to-fold target-AUC σ (0.0088).
 
 | metric | value |
 |---|---|
@@ -143,84 +18,67 @@ Selected by highest ensemble hmean, tie-broken by target AUC and lower fold targ
 | ensemble target AUC | 0.6707 |
 | ensemble overall AUC | 0.6512 |
 | ensemble DCASE hmean | 0.5904 |
-| source AUC − target AUC | -0.0396 |
+| source AUC − target AUC (domain gap) | -0.0396 |
 | per-fold target AUC σ | 0.0088 |
 | K-fold mean best val loss | 0.0571 (±0.0008) |
 | fold count | 3 |
 
-### Winner vs trained UNet (`mixed_unet`)
+The K fold checkpoints for this model are packaged under `best_model/mixed_mobilenet_fold*.pt` for direct use by a future eval-test submission script.
 
-| model | src AUC | tgt AUC | ovr AUC | hmean |
-|---|---:|---:|---:|---:|
-| `mixed_mobilenet` (winner) | 0.6311 | 0.6707 | 0.6512 | 0.5904 |
-| `mixed_unet` | 0.5993 | 0.6127 | 0.6051 | 0.5690 |
+## Leaderboard (by ensemble DCASE harmonic mean)
 
-Conclusion: winner is stronger than trained UNet on all major ranking metrics, especially target AUC.
+| rank | mode | arch | K | src AUC | tgt AUC | ovr AUC | hmean | fold tgt σ | src−tgt gap | mean val loss |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 ← recommended | mixed | mobilenet | 3 | 0.6311 | 0.6707 | 0.6512 | 0.5904 | 0.0088 | -0.0396 | 0.0571 |
+| 2 | domain_regularized | mobilenet | 3 | 0.6099 | 0.6485 | 0.6292 | 0.5740 | 0.0069 | -0.0386 | 0.0594 |
+| 3 | contrastive | mobilenet | 3 | 0.6077 | 0.6426 | 0.6259 | 0.5690 | 0.0095 | -0.0349 | 0.0581 |
+| 4 | mixed | unet | 3 | 0.5993 | 0.6127 | 0.6051 | 0.5690 | 0.0034 | -0.0134 | 0.0004 |
+| 5 | mixed | ae | 3 | 0.6146 | 0.5546 | 0.5853 | 0.5641 | 0.0064 | 0.0600 | 0.0517 |
+| 6 | contrastive | ae | 3 | 0.6218 | 0.5503 | 0.5869 | 0.5613 | 0.0194 | 0.0715 | 0.0514 |
+| 7 | domain_regularized | unet | 3 | 0.5884 | 0.5912 | 0.5892 | 0.5585 | 0.0115 | -0.0029 | 0.0006 |
+| 8 | contrastive | unet | 3 | 0.5752 | 0.5534 | 0.5639 | 0.5497 | 0.0146 | 0.0218 | 0.0011 |
+| 9 | domain_regularized | ae | 3 | 0.5972 | 0.5335 | 0.5662 | 0.5449 | 0.0109 | 0.0636 | 0.0518 |
 
-## 6) Overfitting discussion (train vs val plots)
+## Leaderboard (by ensemble target AUC — DG focus)
 
-Where to inspect:
+| rank | mode | arch | K | src AUC | tgt AUC | ovr AUC | hmean | fold tgt σ | src−tgt gap | mean val loss |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 ← recommended | mixed | mobilenet | 3 | 0.6311 | 0.6707 | 0.6512 | 0.5904 | 0.0088 | -0.0396 | 0.0571 |
+| 2 | domain_regularized | mobilenet | 3 | 0.6099 | 0.6485 | 0.6292 | 0.5740 | 0.0069 | -0.0386 | 0.0594 |
+| 3 | contrastive | mobilenet | 3 | 0.6077 | 0.6426 | 0.6259 | 0.5690 | 0.0095 | -0.0349 | 0.0581 |
+| 4 | mixed | unet | 3 | 0.5993 | 0.6127 | 0.6051 | 0.5690 | 0.0034 | -0.0134 | 0.0004 |
+| 5 | domain_regularized | unet | 3 | 0.5884 | 0.5912 | 0.5892 | 0.5585 | 0.0115 | -0.0029 | 0.0006 |
+| 6 | mixed | ae | 3 | 0.6146 | 0.5546 | 0.5853 | 0.5641 | 0.0064 | 0.0600 | 0.0517 |
+| 7 | contrastive | unet | 3 | 0.5752 | 0.5534 | 0.5639 | 0.5497 | 0.0146 | 0.0218 | 0.0011 |
+| 8 | contrastive | ae | 3 | 0.6218 | 0.5503 | 0.5869 | 0.5613 | 0.0194 | 0.0715 | 0.0514 |
+| 9 | domain_regularized | ae | 3 | 0.5972 | 0.5335 | 0.5662 | 0.5449 | 0.0109 | 0.0636 | 0.0518 |
 
-- `leaderboard.png`, `source_vs_target.png`, `kfold_variance.png`
-- `checkpoints/<run>_kfold_overview.png`
-- `checkpoints/<run>_fold*_history.png`
-- `eval_results/<run>/ensemble/*.png`
+## Figures
 
-Inline previews:
+- `leaderboard.png` — all runs' ensemble AUCs and DCASE hmean (target bars carry ±fold-σ error bars).
+- `source_vs_target.png` — ensemble src-vs-tgt AUC scatter; distance below the y=x line = domain gap.
+- `kfold_variance.png` — per-run dot-plot of per-fold target AUC with the ensemble shown as a red star.
+- `checkpoints/{run}_kfold_overview.png` — one train/val curve per fold for every (mode, arch).
+- `eval_results/{run}/ensemble/` — full ensemble plots (ROC, score histograms, per-section AUC, overall summary).
+- `eval_results/{run}/fold{k}/` — same plots per fold.
 
-![Leaderboard](leaderboard.png)
-![Source vs Target](source_vs_target.png)
-![K-fold Variance](kfold_variance.png)
-![Winner K-fold Overview](checkpoints/mixed_mobilenet_kfold_overview.png)
-![UNet K-fold Overview](checkpoints/mixed_unet_kfold_overview.png)
+## Scope
 
-Observed pattern from history JSONs:
+- Every number above is computed on the **labelled dev-test split** (sections 00-02, 600 clips).
+- **Eval-test (sections 03-05, unlabelled) was NOT touched** by any script in this bundle. The `best_model/` directory contains the K fold checkpoints ready for a future submission script.
 
-- `mixed_mobilenet`: train and val losses decrease together with small late oscillations; no major divergence.
-- `mixed_unet`: very low reconstruction val loss but some late-epoch rebound; strong reconstruction fit does not translate to top anomaly ranking under domain shift.
+## Threshold policy (what is calibrated vs applied)
 
-## 7) Threshold calibration and confusion matrix
+- Threshold is **calibrated on labelled dev-test** using a precision-recall sweep and F1-max selection (`best_thr`).
+- That calibrated threshold is then **applied to eval-test** scores only to produce binary decisions (`decision_result_section_XX.csv`).
+- There is **no threshold calibration on eval-test** itself because eval-test is unlabelled.
+- Eval-train (sections 03-05 train split) is used as part of model training with dev-train; it is **not used for threshold tuning**.
 
-From `phase_final_outputs/threshold_metrics.json` (calibrated on labeled dev-test):
+## Reproducing any phase-2 row
 
-- threshold: **0.0543546490**
-- precision: **0.5615**
-- recall: **0.9433**
-- f1: **0.7040**
-- roc_auc: **0.6512**
-
-Confusion matrix (dev-test):
-
-- TN = 79
-- FP = 221
-- FN = 17
-- TP = 283
-
-Interpretation:
-
-- Low FN and high recall mean anomalies are mostly caught.
-- High FP indicates many false alarms; threshold can be shifted if precision is prioritized over recall.
-
-## 8) Unlabeled eval-test output scope
-
-For unlabeled eval-test (`predict_outputs/`):
-
-- scored clips: 600 (sections 03/04/05)
-- score files generated per section
-- threshold in latest standalone test: `None` (scores only)
-
-Important clarification:
-
-- Source/target **domain labels** are not available in eval-test.
-- If anomaly/normal **ground-truth labels** are available locally, confusion matrix can be computed for eval-test.
-- For official DCASE evaluation data (where anomaly/normal labels are hidden), confusion matrix cannot be computed offline and is available only after official scoring.
-
-## 9) Repro commands (core)
-
-```bash
-python prepare_cache_lean.py
-python train_lean.py --mode <mode> --arch <arch> --n_folds 3
+```
+python prepare_cache_lean.py                                   # dev-train + eval-train + dev-test caches
+python train_lean.py    --mode <mode> --arch <arch> --n_folds 5
 python evaluate_lean.py --mode <mode> --arch <arch>
 python collect_results_lean.py --rank_by hmean
-python predict.py --model_dir <results_phase_final> --input_dir <eval_test_dir> --out_dir <predict_outputs>
 ```
