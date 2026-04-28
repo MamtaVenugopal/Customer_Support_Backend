@@ -1,6 +1,15 @@
 # Final Phase Report (Consolidated)
 _Updated for discussion-ready storytelling_
 
+## Executive talk track (2 minutes)
+
+- We solve unsupervised bearing anomaly detection under domain shift, where source data is abundant and target data is extremely scarce.
+- Raw training distribution is highly imbalanced (about 5940 source vs 59 target), so we do not rely on naive random batching.
+- We use stratified 3-fold CV for robust model selection and balanced minibatch sampling (`target_ratio=0.2`) so target clips contribute to gradients.
+- We compare 9 runs across architecture/mode combinations and select the winner by DCASE harmonic mean with target-aware tie-breaks.
+- Best model is `mixed/mobilenet` (3-fold ensemble), which outperforms trained UNet on source/target/overall AUC and hmean.
+- Threshold calibration on labeled dev-test gives high recall (low FN) at the cost of higher FP, matching a safety-first operating point.
+
 ## 1) Problem statement and dataset context
 
 This work addresses **unsupervised anomalous sound detection (ASD)** for machine condition monitoring with a **domain generalization** constraint (DCASE 2022 Task 2 style):
@@ -51,10 +60,26 @@ Output: `(recon, z)`, with anomaly score as reconstruction MSE.
 
 Modes in `train_lean.py`:
 
-- `baseline`: source-only, reconstruction MSE
-- `mixed`: source+target mixed batches, reconstruction MSE
-- `domain_regularized`: reconstruction MSE + 0.1 * domain CE loss
-- `contrastive`: reconstruction MSE + 0.1 * contrastive term
+- `baseline`: source-only batches, optimize reconstruction MSE only
+- `mixed`: source+target batches, optimize reconstruction MSE only
+- `domain_regularized`: reconstruction MSE + domain classification regularizer
+- `contrastive`: reconstruction MSE + contrastive regularizer
+
+Loss formulation:
+
+- `L_rec = MSE(recon, x)`
+- `L_total = L_rec + 0.1 * L_dom + 0.1 * L_ctr`
+- Mode-specific activation:
+  - `baseline`: `L_total = L_rec`
+  - `mixed`: `L_total = L_rec`
+  - `domain_regularized`: `L_total = L_rec + 0.1 * CrossEntropy(domain_clf(z), domain_label)`
+  - `contrastive`: `L_total = L_rec + 0.1 * contrastive_loss(mean_pool(z), mean_pool(z))`
+
+Key interpretation:
+
+- Modes are primarily defined by which auxiliary loss terms are active.
+- `mixed` changes data exposure (includes target in training) without adding a new loss term.
+- `domain_regularized` and `contrastive` add auxiliary supervision on top of reconstruction.
 
 K-fold protocol:
 
@@ -72,6 +97,7 @@ Example training logs:
 
 Explanation:
 
+- `train=3998` and `val=2001` are fold-level dataset sizes, not batch sizes.
 - Validation fold still reflects natural imbalance (source dominates target).
 - Training fold is similarly imbalanced at dataset level.
 - But the sampler intentionally enforces higher target ratio in minibatches (`~20%`) so optimization is not fully source-dominated.
