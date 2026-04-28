@@ -54,14 +54,27 @@ Let reconstruction loss be:
 
 - `L_rec = MSE(recon, x)`
 
+Per-batch optimization objective:
+
+- `L_total = L_rec + lambda_dom * L_dom + lambda_ctr * L_ctr`
+- In this project: `lambda_dom = 0.1` when domain-regularized mode is active, and `lambda_ctr = 0.1` when contrastive mode is active.
+- When a term is not active for a mode, its lambda is `0`.
+
 Modes:
 
-- `baseline`: source-only training, optimize `L_rec`
-- `mixed`: mixed source+target batches, optimize `L_rec`
-- `domain_regularized`: mixed batches, optimize  
-  `L = L_rec + 0.1 * CrossEntropy(domain_clf(z), domain_label)`
-- `contrastive`: mixed batches, optimize  
-  `L = L_rec + 0.1 * contrastive_loss(mean_pool(z), mean_pool(z))`
+- `baseline`: source-only training, optimize only `L_rec`
+- `mixed`: source+target batches, optimize only `L_rec`
+- `domain_regularized`: source+target batches, optimize  
+  `L_total = L_rec + 0.1 * CrossEntropy(domain_clf(z), domain_label)`
+- `contrastive`: source+target batches, optimize  
+  `L_total = L_rec + 0.1 * contrastive_loss(mean_pool(z), mean_pool(z))`
+
+How to read this:
+
+- **Modes are defined by which extra loss terms are turned on.**
+- `mixed` changes data exposure (source+target in training) but does not add an extra auxiliary loss.
+- `domain_regularized` and `contrastive` both start from reconstruction learning and then add one regularizer.
+- Final checkpoint selection is still based on validation reconstruction behavior through the fold val-loss criterion.
 
 ## 5) Cross-validation protocol used
 
@@ -84,11 +97,16 @@ What this means:
 
 - **Fold split composition:** one fold's validation subset has 2001 normal clips total, with 1980 source and 21 target.
 - **Train subset composition:** the remaining folds contain 3998 clips total, with 3960 source and 38 target.
+- **These are dataset-level counts:** they describe the full fold partitions, not one optimizer step.
 - **Strong imbalance remains:** even after splitting, source dominates target by roughly 100:1.
-- **Batch balancing is intentional:** the sampler builds mini-batches with about 20% target (`13/64` in this example), which is much higher than the raw dataset ratio.
+- **Batch balancing is intentional:** the sampler builds each mini-batch with about 20% target (`13/64` in this example), which is much higher than the raw dataset ratio.
 - **Why this matters:** without this balancing, gradients would be almost entirely source-driven, and target-domain robustness would usually degrade.
 
-In short, fold-level datasets remain naturally imbalanced, while batch construction partially corrects that imbalance during optimization.
+In short:
+
+- Fold-level datasets remain naturally imbalanced.
+- Batch construction partially corrects imbalance during optimization.
+- Loss mode selection determines whether only reconstruction is optimized (`baseline`, `mixed`) or reconstruction plus auxiliary regularization (`domain_regularized`, `contrastive`).
 
 ## 6) Clarifying "UNet vs trained UNet"
 
