@@ -1,0 +1,81 @@
+{
+  "phase": 2,
+  "per_section": [
+    {
+      "section": 0,
+      "domain": "source",
+      "n": 100,
+      "auc": 0.6888,
+      "pauc": 0.5305263157894737
+    },
+    {
+      "section": 0,
+      "domain": "target",
+      "n": 100,
+      "auc": 0.742,
+      "pauc": 0.4905263157894737
+    },
+    {
+      "section": 1,
+      "domain": "source",
+      "n": 100,
+      "auc": 0.7072,
+      "pauc": 0.5642105263157895
+    },
+    {
+      "section": 1,
+      "domain": "target",
+      "n": 100,
+      "auc": 0.7475999999999999,
+      "pauc": 0.5747368421052632
+    },
+    {
+      "section": 2,
+      "domain": "source",
+      "n": 100,
+      "auc": 0.4676,
+      "pauc": 0.4884210526315789
+    },
+    {
+      "section": 2,
+      "domain": "target",
+      "n": 100,
+      "auc": 0.432,
+      "pauc": 0.4926315789473684
+    }
+  ],
+  "per_domain_overall": {
+    "source": {
+      "auc": 0.6310666666666667,
+      "pauc": 0.5209356725146199,
+      "mean_section_auc": 0.6212,
+      "mean_section_pauc": 0.527719298245614,
+      "n": 300
+    },
+    "target": {
+      "auc": 0.6707111111111111,
+      "pauc": 0.5242105263157895,
+      "mean_section_auc": 0.6405333333333333,
+      "mean_section_pauc": 0.519298245614035,
+      "n": 300
+    }
+  },
+  "overall": {
+    "n": 600,
+    "auc_pooled": 0.6512222222222223,
+    "pauc_pooled": 0.5213450292397661,
+    "mean_section_domain_auc": 0.6308666666666666,
+    "mean_section_domain_pauc": 0.5235087719298246
+  },
+  "harmonic_mean": 0.5904147143605212,
+  "mode": "mixed",
+  "arch": "mobilenet",
+  "ensemble_of": [
+    "/content/checkpoints_phase2/mixed_mobilenet_fold0.pt",
+    "/content/checkpoints_phase2/mixed_mobilenet_fold1.pt",
+    "/content/checkpoints_phase2/mixed_mobilenet_fold2.pt"
+  ],
+  "n_folds": 3,
+  "n_clips": 600,
+  "max_fpr": 0.1
+}
