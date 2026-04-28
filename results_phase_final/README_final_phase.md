@@ -110,6 +110,27 @@ For broader context across all runs:
 - Fold variance and stability:  
   ![K-fold variance](kfold_variance.png)
 
+## FP32 vs FP16 inference (GPU deployment sanity check)
+
+Same winner checkpoints (`best_model/mixed_mobilenet_fold*.pt`), same fixed threshold as FP32 calibration, **600 labelled dev-test clips**. Labels merged from `eval_results/mixed_mobilenet/ensemble/per_clip_scores.csv`; comparison via `compare_fp_predictions.py`.
+
+| mode | TN | FP | FN | TP | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| FP32 | 79 | 221 | 17 | 283 | 0.703980 |
+| FP16 | 78 | 222 | 17 | 283 | 0.703106 |
+
+Delta (FP16 − FP32): TN −1, FP +1, FN 0, TP 0 — **1 decision flip** at clip level (one normal clip crosses the threshold). Practical impact on this run is negligible.
+
+### FP32 vs FP16: what changes in the weights?
+
+There is **no second trained model** and **no separate FP16 checkpoint file** in this pipeline unless you explicitly save one.
+
+- **Checkpoint on disk** stays **FP32** (`torch.save` from training). Loading uses those same tensors.
+- **FP16 inference** (`predict.py --precision fp16` on CUDA): after load, PyTorch casts parameters to **float16 in GPU memory** (`model.half()`), and activations run in half precision. Arithmetic uses fewer mantissa bits than FP32, so scores can shift slightly near the decision boundary — hence the tiny CM delta above.
+- **FP32 inference**: parameters stay float32 on GPU; scores match the original evaluation path most closely.
+
+So the “difference” is **runtime numeric precision**, not different learned weights. To ship true half-precision weights you would export (e.g.) FP16 state dict or ONNX at reduced precision; behaviour would still be “same architecture, same training, different storage/compute dtype.”
+
 ## Reproducing any phase-2 row
 
 ```
